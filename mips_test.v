@@ -9,14 +9,14 @@
 
 // top level design for testing
 module top #(
-    parameter WIDTH = 8, REGBITS = 3
+    parameter WIDTH = 32, REGBITS = 5
 )();
 
-    reg              clk;
-    reg              reset;
-    wire             memread, memwrite;
-    wire [WIDTH-1:0] adr, writedata;
-    wire [WIDTH-1:0] memdata;
+    reg                clk;
+    reg                reset;
+    wire               memread, memwrite;
+    wire [WIDTH-1:0]   adr, writedata;
+    wire [WIDTH-1:0]   memdata;
     
     // 10nsec --> 100MHz
     parameter STEP = 10;
@@ -33,12 +33,17 @@ module top #(
         `ifdef __POST_PR__
             $sdf_annotate("mips.sdf", top.dut, , "sdf.log", "MAXIMUM");
         `endif
-        clk <= 0; reset <= 1; # 22; reset <= 0;
+
+        clk <= 0;
+        reset <= 1;
+        # (STEP * 2);
+
+        reset <= 0;
         // dump waveform
         $dumpfile("dump.vcd");
         $dumpvars(0, top.dut);
         // stop at 1,000 cycles
-        #(STEP * 1000);
+        #(STEP * 25);
         $display("Simulation failed");
         $finish;
     end
@@ -46,6 +51,7 @@ module top #(
     // generate clock to sequence tests
     always #(STEP / 2) begin
         clk <= ~clk;
+        $display("");
     end
 
     always @(negedge clk) begin
@@ -58,42 +64,4 @@ module top #(
             $finish;
         end
     end
-endmodule
-
-// external memory accessed by MIPS
-module exmemory #(
-    parameter WIDTH = 8
-) (
-    input                  clk,
-    input                  memwrite,
-    input      [WIDTH-1:0] adr, writedata,
-    output reg [WIDTH-1:0] memdata
-);
-
-
-    reg  [31:0] RAM [(1<<WIDTH-2)-1:0];
-    wire [31:0] word;
-
-    initial begin
-        $readmemh("memfile.dat",RAM);
-    end
-
-    // read and write bytes from 32-bit word
-    always @(posedge clk)
-        if(memwrite) 
-            case (adr[1:0])
-                2'b00: RAM[adr>>2][7:0] <= writedata;
-                2'b01: RAM[adr>>2][15:8] <= writedata;
-                2'b10: RAM[adr>>2][23:16] <= writedata;
-                2'b11: RAM[adr>>2][31:24] <= writedata;
-            endcase
-
-    assign word = RAM[adr>>2];
-    always @(*)
-        case (adr[1:0])
-            2'b00: memdata <= word[31:24];
-            2'b01: memdata <= word[23:16];
-            2'b10: memdata <= word[15:8];
-            2'b11: memdata <= word[7:0];
-        endcase
 endmodule

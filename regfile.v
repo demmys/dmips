@@ -1,14 +1,14 @@
 module regfile #(
-    parameter WIDTH = 32, REGBITS = 5
+    parameter DATA_WIDTH = 32
 ) (
-    input                clk,
-    input                regwrite,
-    input  [REGBITS-1:0] ra1, ra2, wa,
-    input  [WIDTH-1:0]   wd,
-    output [WIDTH-1:0]   rd1, rd2
+    input                   clk,
+    input                   regwrite,
+    input  [4:0]            ra1, ra2, wa,
+    input  [DATA_WIDTH-1:0] wd,
+    output [DATA_WIDTH-1:0] rd1, rd2
 );
 
-    reg [WIDTH-1:0] RAM [0:(1<<REGBITS)-1];
+    reg [DATA_WIDTH-1:0] RAM [0:31];
 
     // three ported register file
     // read two ports combinationally

@@ -1,67 +1,57 @@
-//-------------------------------------------------------
-// test.v
-// Max Yi (byyi@hmc.edu) and David_Harris@hmc.edu 12/9/03
-// Model of subset of MIPS processor described in Ch 1
-//
-// Matsutani: SDF annotation is added
-//-------------------------------------------------------
 `timescale 1ns/10ps
 
-// top level design for testing
-module top #(
-    parameter WIDTH = 32, REGBITS = 5
+module test #(
+    parameter DATA_WIDTH = 32, INST_BUS_WIDTH = 17, DATA_BUS_WIDTH = 17
 )();
 
-    reg                clk;
-    reg                reset;
-    wire               memread, memwrite;
-    wire [WIDTH-1:0]   adr, writedata;
-    wire [WIDTH-1:0]   memdata;
-    
+    reg                       clk, reset;
+    wire [DATA_WIDTH-1:0]     imemrd, dmemrd;
+    wire                      dmemread, dmemwrite;
+    wire [INST_BUS_WIDTH-1:0] iadr;
+    wire [DATA_BUS_WIDTH-1:0] dadr;
+    wire [DATA_WIDTH-1:0]     dmemwd;
+
     // 10nsec --> 100MHz
     parameter STEP = 10;
-    
-    // instantiate devices to be tested
-    //mips #(WIDTH,REGBITS) dut(clk, reset, memdata, memread, memwrite, adr, writedata);
-    mips dut(clk, reset, memdata, memread, memwrite, adr, writedata);
-    
-    // external memory for code and data
-    exmemory #(WIDTH) exmem(clk, memwrite, adr, writedata, memdata);
-    
-    // initialize test
-    initial begin
-        `ifdef __POST_PR__
-            $sdf_annotate("mips.sdf", top.dut, , "sdf.log", "MAXIMUM");
-        `endif
-
-        clk <= 0;
-        reset <= 1;
-        # (STEP * 2);
-
-        reset <= 0;
-        // dump waveform
-        $dumpfile("dump.vcd");
-        $dumpvars(0, top.dut);
-        // stop at 1,000 cycles
-        #(STEP * 25);
-        $display("Simulation failed");
-        $finish;
-    end
 
     // generate clock to sequence tests
     always #(STEP / 2) begin
         clk <= ~clk;
-        $display("");
     end
 
-    always @(negedge clk) begin
-        if(memwrite) begin
-            $display("Data [%d] is stored in Address [%d]", writedata, adr);
-            if(adr == 255 & writedata == 210)
-                $display("Simulation completely successful");
-            else
-                $display("Simulation failed");
+    mips #(DATA_WIDTH, INST_BUS_WIDTH, DATA_BUS_WIDTH) m(clk, reset, imemrd, dmemrd, dmemread, dmemwrite, iadr, dadr, dmemwd);
+
+    instrom #(DATA_WIDTH, INST_BUS_WIDTH) ir(iadr, imemrd);
+    dataram #(DATA_WIDTH, DATA_BUS_WIDTH) dr(clk, dmemwrite, dadr, dmemwd, dmemrd);
+
+
+
+    initial begin
+        clk <= 0;
+        reset <= 1;
+        $display("\n\n\n\n");
+        #STEP;
+
+        reset <= 0;
+        if (iadr !== 32'h0) begin
+            $display("Reset failed.\nExpected %h but actual is %h", 32'h0, iadr);
             $finish;
         end
+        #STEP;
+
+        if (iadr !== 32'h4) begin
+            $display("First fetch failed.\nExpected %h but actual is %h", 32'h4, iadr);
+            $finish;
+        end
+        #STEP;
+
+        if (iadr !== 32'h8) begin
+            $display("Second fetch failed.\nExpected %h but actual is %h", 32'h8, iadr);
+            $finish;
+        end
+        #(STEP * 4);
+        $display("\n\n\n\nAll green.");
+        $finish;
     end
+
 endmodule

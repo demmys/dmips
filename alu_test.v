@@ -1,13 +1,13 @@
 `timescale 1ns/10ps
 
 module test #(
-    parameter WIDTH = 32
+    parameter DATA_WIDTH = 32
 )();
 
-    reg              clk;
-    reg  [WIDTH-1:0] a, b;
-    reg  [2:0]       alucont;
-    wire [WIDTH-1:0] result;
+    reg                   clk;
+    reg  [DATA_WIDTH-1:0] a, b;
+    reg  [2:0]            alucont;
+    wire [DATA_WIDTH-1:0] result;
 
     // 10nsec --> 100MHz
     parameter STEP = 10;
@@ -17,7 +17,7 @@ module test #(
         clk <= ~clk;
     end
 
-    alu #(WIDTH) alunit(a, b, alucont, result);
+    alu #(DATA_WIDTH) alunit(a, b, alucont, result);
 
     `define SOURCE_A 32'h01234567
     `define SOURCE_B 32'h76543210

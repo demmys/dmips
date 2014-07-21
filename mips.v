@@ -8,309 +8,204 @@
 
 // simplified MIPS processor
 module mips #(
-    parameter WIDTH = 32, REGBITS = 5
+    parameter DATA_WIDTH = 32, INST_BUS_WIDTH = 32, DATA_BUS_WIDTH = 32
 ) (
-    input              clk, reset,
-    input  [WIDTH-1:0] memdata,
-    output             memread, memwrite,
-    output [WIDTH-1:0] adr, writedata
+    input                       clk, reset,
+    input  [DATA_WIDTH-1:0]     imemrd, dmemrd,
+    output                      dmemread, dmemwrite,
+    output [INST_BUS_WIDTH-1:0] iadr,
+    output [DATA_BUS_WIDTH-1:0] dadr,
+    output [DATA_WIDTH-1:0]     dmemwd
 );
 
-    wire [31:0] instr;
-    wire        zero, alusrca, memtoreg, iord, pcen, regwrite, regdst, irwrite;
-    wire [1:0]  aluop, pcsource, alusrcb;
-    wire [2:0]  alucont;
+    wire [31:0] inner_iadr, inner_dadr;
+    assign iadr = inner_iadr[INST_BUS_WIDTH-1:0];
+    assign dadr = inner_dadr[DATA_BUS_WIDTH-1:0];
 
-    controller                   cont(clk, reset, instr[31:26], zero, memread, memwrite, alusrca, memtoreg, iord, pcen, regwrite, regdst, irwrite, pcsource, alusrcb, aluop);
-    alucontrol                   ac(aluop, instr[5:0], alucont);
-    datapath   #(WIDTH, REGBITS) dp(clk, reset, memdata, alusrca, memtoreg, iord, pcen, regwrite, regdst, irwrite, pcsource, alusrcb, alucont, zero, instr, adr, writedata);
+    datapath #(DATA_WIDTH) dp(clk, reset, imemrd, dmemrd, dmemread, dmemwrite, inner_iadr, inner_dadr, dmemwd);
 endmodule
 
 
 
-module controller(
-    input            clk, reset,
-    input      [5:0] op,
-    input            zero,
-    output reg       memread, memwrite, alusrca, memtoreg, iord,
-    output           pcen,
-    output reg       regwrite, regdst, irwrite,
-    output reg [1:0] pcsource, alusrcb, aluop
+module hazarddetect (
+    output pcwrite
 );
 
-    parameter FETCH   = 4'b0001;
-    parameter DECODE  = 4'b0101;
-    parameter MEMADR  = 4'b0110;
-    parameter LBRD    = 4'b0111;
-    parameter LBWR    = 4'b1000;
-    parameter SBWR    = 4'b1001;
-    parameter RTYPEEX = 4'b1010;
-    parameter RTYPEWR = 4'b1011;
-    parameter BEQEX   = 4'b1100;
-    parameter JEX     = 4'b1101;
-    parameter ADDIEX  = 4'b1110;
-    parameter ADDIWR  = 4'b1111;
+    assign pcwrite = 1;
 
-    parameter LB      = 6'b100000;
-    parameter SB      = 6'b101000;
-    parameter RTYPE   = 6'b0;
-    parameter BEQ     = 6'b000100;
-    parameter ADDI    = 6'b001000;
-    parameter J       = 6'b000010;
-
-    reg [3:0] state, nextstate;
-    reg       pcwrite, pcwritecond;
-
-    // state register
-    always @(posedge clk)
-        if(reset) state <= FETCH;
-        else state <= nextstate;
-
-    // next state logic
-    always @(*)
-        case(state)
-            FETCH  : nextstate <= DECODE;
-            DECODE : case(op)
-                LB     : nextstate <= MEMADR;
-                SB     : nextstate <= MEMADR;
-                RTYPE  : nextstate <= RTYPEEX;
-                BEQ    : nextstate <= BEQEX;
-                ADDI   : nextstate <= ADDIEX;
-                J      : nextstate <= JEX;
-                default: nextstate <= FETCH; // should never happen
-            endcase
-            MEMADR : case(op)
-                LB     : nextstate <= LBRD;
-                SB     : nextstate <= SBWR;
-                default: nextstate <= FETCH; // should never happen
-            endcase
-            LBRD   : nextstate <= LBWR;
-            LBWR   : nextstate <= FETCH;
-            SBWR   : nextstate <= FETCH;
-            RTYPEEX: nextstate <= RTYPEWR;
-            RTYPEWR: nextstate <= FETCH;
-            BEQEX  : nextstate <= FETCH;
-            JEX    : nextstate <= FETCH;
-            ADDIEX : nextstate <= ADDIWR;
-            ADDIWR : nextstate <= FETCH;
-            default: nextstate <= FETCH; // should never happen
-        endcase
-
-    always @(*) begin
-        // set all outputs to zero, then conditionally assert just the appropriate ones
-        irwrite     <= 0;
-        pcwrite     <= 0;
-        pcwritecond <= 0;
-        regwrite    <= 0;
-        regdst      <= 0;
-        memread     <= 0;
-        memwrite    <= 0;
-        alusrca     <= 0;
-        alusrcb     <= 2'b00;
-        aluop       <= 2'b00;
-        pcsource    <= 2'b00;
-        iord        <= 0;
-        memtoreg    <= 0;
-        case(state)
-            FETCH: begin
-                memread <= 1;
-                irwrite <= 1;
-                alusrcb <= 2'b01;
-                pcwrite <= 1;
-            end
-            DECODE: alusrcb <= 2'b11;
-            MEMADR: begin
-                alusrca <= 1;
-                alusrcb <= 2'b10;
-            end
-            LBRD: begin
-                memread <= 1;
-                iord    <= 1;
-            end
-            LBWR: begin
-                regwrite <= 1;
-                memtoreg <= 1;
-            end
-            SBWR: begin
-                memwrite <= 1;
-                iord     <= 1;
-            end
-            RTYPEEX: begin
-                alusrca <= 1;
-                aluop   <= 2'b10;
-            end
-            RTYPEWR: begin
-                regdst   <= 1;
-                regwrite <= 1;
-            end
-            BEQEX: begin
-                alusrca     <= 1;
-                aluop       <= 2'b01;
-                pcwritecond <= 1;
-                pcsource    <= 2'b01;
-            end
-            JEX: begin
-                pcwrite  <= 1;
-                pcsource <= 2'b10;
-            end
-            ADDIEX: begin
-                alusrca <= 1;
-                alusrcb <= 2'b10;
-            end
-            ADDIWR: begin
-                regdst   <= 0;
-                regwrite <= 1;
-            end
-        endcase
-    end
-    assign pcen = pcwrite | (pcwritecond & zero); // program counter enable
-endmodule
-
-
-
-module alucontrol(
-    input      [1:0] aluop,
-    input      [5:0] funct,
-    output reg [2:0] alucont
-);
-
-    always @(*)
-        case(aluop)
-            2'b00  : alucont <= 3'b010;  // add for lb/sb/addi
-            2'b01  : alucont <= 3'b110;  // sub (for beq)
-            default: case(funct)       // R-Type instructions
-                6'b100000: alucont <= 3'b010; // add (for add)
-                6'b100010: alucont <= 3'b110; // subtract (for sub)
-                6'b100100: alucont <= 3'b000; // logical and (for and)
-                6'b100101: alucont <= 3'b001; // logical or (for or)
-                6'b101010: alucont <= 3'b111; // set on less (for slt)
-                default  : alucont <= 3'b101; // should never happen
-            endcase
-        endcase
 endmodule
 
 
 
 module datapath #(
-    parameter WIDTH = 32, REGBITS = 5
+    parameter DATA_WIDTH = 32
 ) (
-    input              clk, reset,
-    input  [WIDTH-1:0] memdata,
-    input              alusrca, memtoreg, iord, pcen, regwrite, regdst, irwrite,
-    input  [1:0]       pcsource, alusrcb,
-    input  [2:0]       alucont,
-    output             zero,
-    output [31:0]      instr,
-    output [WIDTH-1:0] adr, writedata
+    input                   clk, reset,
+    input  [DATA_WIDTH-1:0] imemrd, dmemrd,
+    output                  dmemread, dmemwrite,
+    output [31:0]           iadr, dadr,
+    output [DATA_WIDTH-1:0] dmemwd
 );
 
-    // the size of the parameters must be changed to match the WIDTH parameter
-    parameter CONST_ZERO = 32'b0;
-    parameter CONST_FOUR = 32'h4;
+    parameter NOP = 32'h20000000;
 
-    wire [REGBITS-1:0] ra1, ra2, wa;
-    wire [WIDTH-1:0]   pc, nextpc, md, rd1, rd2, wd, a, src1, src2, aluresult, aluout, imm, dest;
+    /*
+     * Instruction Fetch
+     */
+    reg  [31:0] if_id_pc, if_id_instr;
 
-    // expand immediate value
-    assign imm = { { (REGBITS*2+6){ instr[WIDTH-7-REGBITS*2] } }, instr[WIDTH-7-REGBITS*2:0] };
+    wire        pcwrite, flush;
+    wire [1:0]  pcsrc;
+    wire [31:0] pc, nextpc, incpc, branchpc, jumppc, instr;
 
-    // jump addres
-    assign dest = { pc[WIDTH-1:WIDTH-5], instr[WIDTH-7:0] } << 2;
+    assign iadr = pc;
 
-    // register file address fields
-    assign ra1 = instr[WIDTH-7:WIDTH-6-REGBITS];
-    assign ra2 = instr[WIDTH-7-REGBITS:WIDTH-6-REGBITS*2];
+    adder        #(32) pcadder(pc, 32'h00000004, incpc);
+    mux4         #(32) pcselect(incpc, branchpc, jumppc, pc, pcsrc, nextpc);
+    hazarddetect       hd(pcwrite);
+    flopenr      #(32) pcupdate(clk, reset, pcwrite, nextpc, pc);
+    mux2         #(32) instrselect(imemrd, NOP, flush, instr);
 
-    // choose destination register file address
-    mux2       #(REGBITS)        regdistmux(instr[WIDTH-7-REGBITS:WIDTH-6-REGBITS*2], instr[WIDTH-7-REGBITS:WIDTH-6-REGBITS*3], regdst, wa);
+    always @(posedge clk) begin
+        if_id_pc    <= incpc;
+        if_id_instr <= instr;
+    end
 
-    // load instruction into register
-    // enable: FETCH
-    flopen     #(WIDTH)          loadinst(clk, irwrite, memdata, instr);
 
-    // datapath
+    /*
+     * Instruction Decode
+     */
+    reg                   id_ex_regdst, id_ex_alusrc, id_ex_memwrite, id_ex_memread, id_ex_memtoreg, id_ex_regwrite;
+    reg  [2:0]            id_ex_alucont;
+    reg  [4:0]            id_ex_rs, id_ex_rt, id_ex_rd;
+    reg  [31:0]           id_ex_imm;
+    reg  [DATA_WIDTH-1:0] id_ex_rd1, id_ex_rd2;
 
-    // load next pc
-    // enable: FETCH, JEX, BEQEX(if aluresult == zero)
-    flopenr    #(WIDTH)          pcreg(clk, reset, pcen, nextpc, pc);
+    wire                  regdst, alusrc, branch, jump, memwrite, memread, memtoreg, regwrite, eq;
+    wire [2:0]            alucont;
+    wire [5:0]            op, funct;
+    wire [4:0]            rs, rt, rd;
+    wire [31:0]           imm, wd;
+    wire [DATA_WIDTH-1:0] rd1, rd2;
 
-    // load memdata to md
-    flop       #(WIDTH)          mdr(clk, memdata, md);
+    assign op    = if_id_instr[31:26];
+    assign rs    = if_id_instr[25:21];
+    assign rt    = if_id_instr[20:16];
+    assign rd    = if_id_instr[15:11];
+    assign funct = if_id_instr[5:0];
+    assign imm   = { { 16{ if_id_instr[15] } }, if_id_instr[15:0] };
 
-    // set readed data 1 to a(candidate of aulsrc1)
-    flop       #(WIDTH)          areg(clk, rd1, a);
+    controller ctl(op, funct, branch, jump, regdst, alusrc, memwrite, memread, memtoreg, regwrite, flush, alucont);
 
-    // set readed data 2 to writedata(candidate of alusrc2)
-    flop       #(WIDTH)          wrd(clk, rd2, writedata);
+    regfile #(DATA_WIDTH) rf(clk, mem_wb_regwrite, rs, rt, mem_wb_wa, wd, rd1, rd2);
 
-    // set aluresult to aluout(candidate of adr: exmemory address)
-    flop       #(WIDTH)          res(clk, aluresult, aluout);
+    adder #(32) branchadder(if_id_pc, imm << 2, branchpc);
+    eqdetect #(DATA_WIDTH) ed(rd1, rd2, eq);
+    assign jumppc = { if_id_pc[31:28], if_id_instr[25:0] } << 2;
+    assign pcsrc = { jump, branch & eq };
 
-    // choose exmemory address
-    // select1: LBRD, SBWR
-    mux2       #(WIDTH)          adrmux(pc, aluout, iord, adr);
+    always @(posedge clk) begin
+        id_ex_regdst   <= regdst;
+        id_ex_alusrc   <= alusrc;
+        id_ex_memwrite <= memwrite;
+        id_ex_memread  <= memread;
+        id_ex_memtoreg <= memtoreg;
+        id_ex_regwrite <= regwrite;
+        id_ex_alucont  <= alucont;
+        id_ex_rd1      <= rd1;
+        id_ex_rd2      <= rd2;
+        id_ex_rs       <= rs;
+        id_ex_rt       <= rt;
+        id_ex_rd       <= rd;
+        id_ex_imm      <= imm;
+    end
 
-    // choose alu source 1
-    // select1: MEMADR, RTYPEEX, BEQEX, ADDIEX
-    mux2       #(WIDTH)          src1mux(pc, a, alusrca, src1);
 
-    // choose alu source 2
-    // select1: FETCH, select2: MEMADR, ADDIEX, select3: DECODE
-    mux4       #(WIDTH)          src2mux(writedata, CONST_FOUR, imm, imm << 2, alusrcb, src2);
+    /*
+     * Execute
+     */
+    reg         ex_mem_memwrite, ex_mem_memread, ex_mem_memtoreg, ex_mem_regwrite;
+    reg [4:0]   ex_mem_wa;
+    reg [31:0]  ex_mem_alures, ex_mem_writedata;
 
-    // choose next pc
-    // select1: BEQEX, select2: JEX
-    mux4       #(WIDTH)          pcmux(aluresult, aluout, dest, CONST_ZERO, pcsource, nextpc);
+    wire [4:0]  wa;
+    wire [31:0] alusrc2, alures;
 
-    // choose write data
-    // select1: LBWR
-    mux2       #(WIDTH)          wdmux(aluout, md, memtoreg, wd);
+    mux2 #(DATA_WIDTH) alusrc2select(id_ex_rd2, id_ex_imm, id_ex_alusrc, alusrc2);
+    alu  #(DATA_WIDTH) alunit(id_ex_rd1, alusrc2, id_ex_alucont, alures);
+    mux2 #(5)          waselect(id_ex_rt, id_ex_rd, id_ex_regdst, wa);
 
-    regfile    #(WIDTH, REGBITS) rf(clk, regwrite, ra1, ra2, wa, wd, rd1, rd2);
-    alu        #(WIDTH)          alunit(src1, src2, alucont, aluresult);
-    zerodetect #(WIDTH)          zd(aluresult, zero);
+    always @(posedge clk) begin
+        ex_mem_memwrite <= id_ex_memwrite;
+        ex_mem_memread  <= id_ex_memread;
+        ex_mem_memtoreg <= id_ex_memtoreg;
+        ex_mem_regwrite <= id_ex_regwrite;
+        ex_mem_alures   <= alures;
+        ex_mem_writedata <= id_ex_rd2;
+        ex_mem_wa       <= wa;
+    end
+
+
+    /*
+     * Memory
+     */
+    reg        mem_wb_regwrite, mem_wb_memtoreg;
+    reg [4:0]  mem_wb_wa;
+    reg [31:0] mem_wb_readdata, mem_wb_alures;
+
+    assign dadr      = ex_mem_alures;
+    assign dmemwd    = ex_mem_writedata;
+    assign dmemread  = ex_mem_memread;
+    assign dmemwrite = ex_mem_memwrite;
+
+    always @(posedge clk) begin
+        mem_wb_regwrite <= ex_mem_regwrite;
+        mem_wb_memtoreg <= ex_mem_memtoreg;
+        mem_wb_wa <= ex_mem_wa;
+        mem_wb_readdata <= dmemrd;
+        mem_wb_alures <= ex_mem_alures;
+    end
+
+
+    /*
+     * Write Back
+     */
+    mux2 #(DATA_WIDTH) wdselect(mem_wb_alures, mem_wb_readdata, mem_wb_memtoreg, wd);
+
+
+    always @(posedge clk) begin
+        $display("\n\n\nInstruction Fetch\n>>> pc: %h, instr: %h\n>>> incpc: %h, branchpc: %h, jumppc: %h, pcsrc: %b", pc, imemrd, incpc, branchpc, jumppc, pcsrc);
+        $display("\nInstruction Decode\n>>> op: %h, rs: %h, rt: %h, rd: %h, funct: %h, imm: %h\n>>> rd1: %h, rd2: %h", op, rs, rt, rd, funct, imm, rd1, rd2);
+        $display("\nExecute\n>>> alusrc1: %h, alusrc2: %h, alures: %h", id_ex_rd1, alusrc2, alures);
+        $display("\nMemory\n>>> dadr: %h, dmemwd: %h, dmemread: %b, dmemwrite: %b", dadr, dmemwd, dmemread, dmemwrite);
+        $display("\nWrite Back\n>>> wa: %h, wd: %h, regwrite: %h", mem_wb_wa, wd, mem_wb_regwrite);
+    end
 
 endmodule
 
 
 
-module zerodetect #(
+module adder #(
     parameter WIDTH = 32
 ) (
-    input [WIDTH-1:0] a,
-    output            y
+    input  [WIDTH-1:0] a, b,
+    output [WIDTH-1:0] y
 );
 
-    assign y = a == 0;
+    assign y = a + b;
+
 endmodule
 
 
 
-module flop #(
+module eqdetect #(
     parameter WIDTH = 32
 ) (
-    input                  clk,
-    input      [WIDTH-1:0] d,
-    output reg [WIDTH-1:0] q
+    input  [WIDTH-1:0] a, b,
+    output             y
 );
 
-    always @(posedge clk)
-        q <= d;
-endmodule
-
-
-
-module flopen #(
-    parameter WIDTH = 32
-) (
-    input                  clk, en,
-    input      [WIDTH-1:0] d,
-    output reg [WIDTH-1:0] q
-);
-
-    always @(posedge clk)
-        if (en)
-            q <= d;
+    assign y = a == b;
 endmodule
 
 
@@ -325,8 +220,7 @@ module flopenr #(
 
     always @(posedge clk)
         if      (reset) q <= 0;
-        else if (en)
-            q <= d;
+        else if (en)    q <= d;
 endmodule
 
 

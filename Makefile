@@ -1,9 +1,11 @@
 VC = iverilog
 
 SOURCES = \
-		  exmemory.v \
+		  dataram.v \
+		  instrom.v \
 		  alu.v \
 		  regfile.v \
+		  controller.v \
 		  mips.v
 TEST_EXECUTIONS = $(SOURCES:%.v=%.test)
 

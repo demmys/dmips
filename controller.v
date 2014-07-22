@@ -6,8 +6,9 @@ module alucontrol(
 
     always @(*)
         case(aluop)
-            2'b00  : alucont <= 3'b010;  // add for lb/sb/addi (beq/j will be settled here)
-            default: case(funct)       // R-Type instructions
+            2'b00  : alucont <= 3'b010; // add for lb/sb/addi (j will be settled here)
+            2'b01  : alucont <= 3'b110; // sub for beq
+            default: case(funct)        // R-Type instructions
                 6'b100000: alucont <= 3'b010; // add (for add)
                 6'b100010: alucont <= 3'b110; // subtract (for sub)
                 6'b100100: alucont <= 3'b000; // logical and (for and)
@@ -22,7 +23,7 @@ endmodule
 
 module controller (
     input [5:0]  op, funct,
-    output reg   branch, jump, regdst, alusrc, memwrite, memread, memtoreg, regwrite, flush,
+    output reg   branch, jump, regdst, alusrc, memwrite, memread, memtoreg, regwrite,
     output [2:0] alucont
 );
 
@@ -46,7 +47,6 @@ module controller (
         memread  <= 0;
         memtoreg <= 0;
         regwrite <= 0;
-        flush    <= 0;
         aluop    <= 2'b00;
 
         case (op)
@@ -71,10 +71,10 @@ module controller (
             end
             BEQ: begin
                 branch   <= 1;
+                aluop    <= 2'b01;
             end
             J: begin
                 jump     <= 1;
-                flush    <= 1;
             end
         endcase
     end

@@ -7,6 +7,7 @@ module test #(
     reg                   clk;
     reg  [DATA_WIDTH-1:0] a, b;
     reg  [2:0]            alucont;
+    wire                  zero;
     wire [DATA_WIDTH-1:0] result;
 
     // 10nsec --> 100MHz
@@ -17,7 +18,7 @@ module test #(
         clk <= ~clk;
     end
 
-    alu #(DATA_WIDTH) alunit(a, b, alucont, result);
+    alu #(DATA_WIDTH) alunit(a, b, alucont, zero, result);
 
     `define SOURCE_A 32'h01234567
     `define SOURCE_B 32'h76543210
@@ -79,7 +80,7 @@ module test #(
         alucont <= `CONT_SUB;
         # STEP;
 
-        if (result !== `RESULT_SUB) begin
+        if (result !== `RESULT_SUB && zero !== 0) begin
             $display("ALU SUB operation failed.\nExpected %h but actual is %h", `RESULT_SUB, result);
             $finish;
         end
@@ -88,6 +89,15 @@ module test #(
 
         if (result !== `RESULT_SLT) begin
             $display("ALU SLT operation failed.\nExpected %h but actual is %h", `RESULT_SLT, result);
+            $finish;
+        end
+        a <= 32'h01234567;
+        b <= 32'h01234567;
+        alucont <= `CONT_SUB;
+        # STEP;
+
+        if (zero !== 1) begin
+            $display("ALU SUB operation zero result failed.\nExpected %b but actual is %b", 1, zero);
             $finish;
         end
         $display("All green.");

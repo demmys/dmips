@@ -9,23 +9,24 @@
 
 // top level design for testing
 module top #(
-    parameter WIDTH = 32
+    parameter DATA_WIDTH = 32, INST_BUS_WIDTH = 17, DATA_BUS_WIDTH = 17
 )();
 
-    reg                clk;
-    reg                reset;
-    wire               memread, memwrite;
-    wire [WIDTH-1:0]   adr, writedata;
-    wire [WIDTH-1:0]   memdata;
+    reg                       clk, reset;
+    wire [INST_BUS_WIDTH-1:0] iadr;
+    wire [DATA_BUS_WIDTH-1:0] dadr;
+    wire                      dmemread, dmemwrite;
+    wire [DATA_WIDTH-1:0]     imemrd, dmemrd, dmemwd;
     
     // 10nsec --> 100MHz
     parameter STEP = 10;
     
     // instantiate devices to be tested
-    mips dut(clk, reset, memdata, memread, memwrite, adr, writedata);
+    mips #(DATA_WIDTH, INST_BUS_WIDTH, DATA_BUS_WIDTH) dut(clk, reset, imemrd, dmemrd, dmemread, dmemwrite, iadr, dadr, dmemwd);
     
     // external memory for code and data
-    exmemory #(WIDTH) exmem(clk, memwrite, adr, writedata, memdata);
+    dataram #(DATA_WIDTH, DATA_BUS_WIDTH) dr(clk, dmemwrite, dadr, dmemwd, dmemrd);
+    instrom #(DATA_WIDTH, INST_BUS_WIDTH) ir(iadr, imemrd);
     
     // initialize test
     initial begin
@@ -42,7 +43,7 @@ module top #(
         $dumpfile("dump.vcd");
         $dumpvars(0, top.dut);
         // stop at 1,000 cycles
-        #(STEP * 25);
+        #(STEP * 1000);
         $display("Simulation failed");
         $finish;
     end
@@ -54,9 +55,9 @@ module top #(
     end
 
     always @(negedge clk) begin
-        if(memwrite) begin
-            $display("Data [%d] is stored in Address [%d]", writedata, adr);
-            if(adr == 255 & writedata == 210)
+        if(dmemwrite) begin
+            $display("Data [%d] is stored in Address [%d]", dmemwd, dadr);
+            if(dadr == 255 & dmemwd == 210)
                 $display("Simulation completely successful");
             else
                 $display("Simulation failed");

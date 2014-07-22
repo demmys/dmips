@@ -3,6 +3,7 @@ module alu #(
 ) (
     input      [DATA_WIDTH-1:0] a, b,
     input      [2:0]            alucont,
+    output                      zero,
     output reg [DATA_WIDTH-1:0] result
 );
 
@@ -12,6 +13,9 @@ module alu #(
     assign sum = a + b2 + alucont[2];
     // slt should be 1 if most significant bit of sum is 1
     assign slt = sum[DATA_WIDTH-1];
+
+    // if sum is zero, set 1
+    assign zero = !(|sum);
 
     always@(*)
         case(alucont[1:0])

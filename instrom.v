@@ -8,7 +8,7 @@ module instrom #(
     reg [DATA_WIDTH-1:0] ROM [0:(1<<(BUS_WIDTH-2))-1];
 
     initial begin
-        $readmemh("test.dat", ROM);
+        $readmemh("memfile.dat", ROM);
     end
 
     assign readdata = ROM[adr>>2];

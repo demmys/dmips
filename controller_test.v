@@ -4,7 +4,7 @@ module test ();
 
     reg        clk;
     wire [5:0] op, funct;
-    wire       branch, jump, regdst, alusrc, memwrite, memread, memtoreg, regwrite, flush;
+    wire       branch, jump, regdst, alusrc, memwrite, memread, memtoreg, regwrite;
     wire [2:0] alucont;
 
     // 10nsec --> 100MHz
@@ -15,7 +15,7 @@ module test ();
         clk <= ~clk;
     end
 
-    controller ctl(op, funct, branch, jump, regdst, alusrc, memwrite, memread, memtoreg, regwrite, flush, alucont);
+    controller ctl(op, funct, branch, jump, regdst, alusrc, memwrite, memread, memtoreg, regwrite, alucont);
 
     // add  $3, $1, $2
     `define ADD  32'h00221820
@@ -49,21 +49,21 @@ module test ();
         instr <= `ADD;
         #STEP;
 
-        if (branch !== 0 || jump !== 0 || regdst !== 1 || alusrc !== 0 || memwrite !== 0 || memread !== 0 || memtoreg !== 0 || regwrite !== 1 || flush !== 0 || alucont !== 3'b010) begin
+        if (branch !== 0 || jump !== 0 || regdst !== 1 || alusrc !== 0 || memwrite !== 0 || memread !== 0 || memtoreg !== 0 || regwrite !== 1 || alucont !== 3'b010) begin
             $display("ADD instruction failed.");
             $finish;
         end
         instr <= `SUB;
         #STEP;
 
-        if (branch !== 0 || jump !== 0 || regdst !== 1 || alusrc !== 0 || memwrite !== 0 || memread !== 0 || memtoreg !== 0 || regwrite !== 1 || flush !== 0 || alucont !== 3'b110) begin
+        if (branch !== 0 || jump !== 0 || regdst !== 1 || alusrc !== 0 || memwrite !== 0 || memread !== 0 || memtoreg !== 0 || regwrite !== 1 || alucont !== 3'b110) begin
             $display("SUB instruction failed.");
             $finish;
         end
         instr <= `AND;
         #STEP;
 
-        if (branch !== 0 || jump !== 0 || regdst !== 1 || alusrc !== 0 || memwrite !== 0 || memread !== 0 || memtoreg !== 0 || regwrite !== 1 || flush !== 0 || alucont !== 3'b000) begin
+        if (branch !== 0 || jump !== 0 || regdst !== 1 || alusrc !== 0 || memwrite !== 0 || memread !== 0 || memtoreg !== 0 || regwrite !== 1 || alucont !== 3'b000) begin
             $display("AND instruction failed.");
             $finish;
         end
@@ -77,7 +77,7 @@ module test ();
         instr <= `SLT;
         #STEP;
 
-        if (branch !== 0 || jump !== 0 || regdst !== 1 || alusrc !== 0 || memwrite !== 0 || memread !== 0 || memtoreg !== 0 || regwrite !== 1 || flush !== 0 || alucont !== 3'b111) begin
+        if (branch !== 0 || jump !== 0 || regdst !== 1 || alusrc !== 0 || memwrite !== 0 || memread !== 0 || memtoreg !== 0 || regwrite !== 1 || alucont !== 3'b111) begin
             $display("SLT instruction failed.");
             $finish;
         end
@@ -91,28 +91,28 @@ module test ();
         instr <= `BEQ;
         #STEP;
 
-        if (branch !== 1 || jump !== 0 || regdst !== 0 || alusrc !== 0 || memwrite !== 0 || memread !== 0 || memtoreg !== 0 || regwrite !== 0 || alucont !== 3'b010) begin
+        if (branch !== 1 || jump !== 0 || regdst !== 0 || alusrc !== 0 || memwrite !== 0 || memread !== 0 || memtoreg !== 0 || regwrite !== 0 || alucont !== 3'b110) begin
             $display("BEQ instruction failed.");
             $finish;
         end
         instr <= `J;
         #STEP;
 
-        if (branch !== 0 || jump !== 1 || regdst !== 0 || alusrc !== 0 || memwrite !== 0 || memread !== 0 || memtoreg !== 0 || regwrite !== 0 || flush !== 1 || alucont !== 3'b010) begin
+        if (branch !== 0 || jump !== 1 || regdst !== 0 || alusrc !== 0 || memwrite !== 0 || memread !== 0 || memtoreg !== 0 || regwrite !== 0 || alucont !== 3'b010) begin
             $display("J instruction failed.");
             $finish;
         end
         instr <= `LB;
         #STEP;
 
-        if (branch !== 0 || jump !== 0 || regdst !== 0 || alusrc !== 1 || memwrite !== 0 || memread !== 1 || memtoreg !== 1 || regwrite !== 1 || flush !== 0 || alucont !== 3'b010) begin
+        if (branch !== 0 || jump !== 0 || regdst !== 0 || alusrc !== 1 || memwrite !== 0 || memread !== 1 || memtoreg !== 1 || regwrite !== 1 || alucont !== 3'b010) begin
             $display("LB instruction failed.");
             $finish;
         end
         instr <= `SB;
         #STEP;
 
-        if (branch !== 0 || jump !== 0 || regdst !== 0 || alusrc !== 1 || memwrite !== 1 || memread !== 0 || memtoreg !== 0 || regwrite !== 0 || flush !== 0 || alucont !== 3'b010) begin
+        if (branch !== 0 || jump !== 0 || regdst !== 0 || alusrc !== 1 || memwrite !== 1 || memread !== 0 || memtoreg !== 0 || regwrite !== 0 || alucont !== 3'b010) begin
             $display("SB instruction failed.");
             $finish;
         end

@@ -225,6 +225,7 @@ module datapath #(
     mux2 #(DATA_WIDTH) wdselect(mem_wb_alures, mem_wb_readdata, mem_wb_memtoreg, wd);
 
 
+    /*
     always @(posedge clk) begin
         $display("\n\n\nInstruction Fetch\n___ pc: %h, instr: %h\n___ incpc: %h, branchpc: %h, jumppc: %h, pcsrc: %b (jump: %b, branch: %b, eq: %b, lookahead: %b, hazard: %b, ex_branch: %b, zero: %b)", pc, imemrd, incpc, branchpc, jumppc, pcsrc, jump, branch, eq, lookahead, hazard, id_ex_branch, zero);
         $display("\nInstruction Decode\n___ op: %h, rs: %h, rt: %h, rd: %h, funct: %h, imm: %h\n___ rd1: %h, rd2: %h, rd1_forwarded: %b, rd2_forwarded: %b", op, rs, rt, rd, funct, imm, fw_rd1, fw_rd2, id_rd1fw, id_rd2fw);
@@ -232,6 +233,7 @@ module datapath #(
         $display("\nMemory\n___ dmem_address: %h, dmem_rd: %h, dmem_wd: %h, memread: %b, memwrite: %b", dadr, dmemrd, dmemwd, dmemread, dmemwrite);
         $display("\nWrite Back\n___ wa: %h, wd: %h, memtoreg: %b, regwrite: %b", mem_wb_wa, wd, mem_wb_memtoreg, mem_wb_regwrite);
     end
+    */
 
 endmodule
 

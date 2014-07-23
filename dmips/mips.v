@@ -224,17 +224,147 @@ module datapath #(
     // wiring
     mux2 #(DATA_WIDTH) wdselect(mem_wb_alures, mem_wb_readdata, mem_wb_memtoreg, wd);
 
+endmodule
 
-    /*
-    always @(posedge clk) begin
-        $display("\n\n\nInstruction Fetch\n___ pc: %h, instr: %h\n___ incpc: %h, branchpc: %h, jumppc: %h, pcsrc: %b (jump: %b, branch: %b, eq: %b, lookahead: %b, hazard: %b, ex_branch: %b, zero: %b)", pc, imemrd, incpc, branchpc, jumppc, pcsrc, jump, branch, eq, lookahead, hazard, id_ex_branch, zero);
-        $display("\nInstruction Decode\n___ op: %h, rs: %h, rt: %h, rd: %h, funct: %h, imm: %h\n___ rd1: %h, rd2: %h, rd1_forwarded: %b, rd2_forwarded: %b", op, rs, rt, rd, funct, imm, fw_rd1, fw_rd2, id_rd1fw, id_rd2fw);
-        $display("\nExecute\n___ alusrc1: %h, alusrc2: %h, alures: %h, ex_rd1fw: %b, ex_rd2fw: %b, branchpc: %h", fw_id_ex_rd1, alusrc2, alures, ex_rd1fw, ex_rd2fw, id_ex_branchpc);
-        $display("\nMemory\n___ dmem_address: %h, dmem_rd: %h, dmem_wd: %h, memread: %b, memwrite: %b", dadr, dmemrd, dmemwd, dmemread, dmemwrite);
-        $display("\nWrite Back\n___ wa: %h, wd: %h, memtoreg: %b, regwrite: %b", mem_wb_wa, wd, mem_wb_memtoreg, mem_wb_regwrite);
+
+
+module alucontrol(
+    input      [1:0] aluop,
+    input      [5:0] funct,
+    output reg [2:0] alucont
+);
+
+    always @(*)
+        case(aluop)
+            2'b00  : alucont <= 3'b010; // add for lb/sb/addi (j will be settled here)
+            2'b01  : alucont <= 3'b110; // sub for beq
+            default: case(funct)        // R-Type instructions
+                6'b100000: alucont <= 3'b010; // add (for add)
+                6'b100010: alucont <= 3'b110; // subtract (for sub)
+                6'b100100: alucont <= 3'b000; // logical and (for and)
+                6'b100101: alucont <= 3'b001; // logical or (for or)
+                6'b101010: alucont <= 3'b111; // set on less (for slt)
+                default  : alucont <= 3'b101; // no operation 
+            endcase
+        endcase
+endmodule
+
+
+
+module controller (
+    input [5:0]  op, funct,
+    output reg   branch, jump, regdst, alusrc, memwrite, memread, memtoreg, regwrite,
+    output [2:0] alucont
+);
+
+    parameter RTYPE = 6'b000000;
+    parameter ADDI  = 6'b001000;
+    parameter LB    = 6'b100000;
+    parameter SB    = 6'b101000;
+    parameter BEQ   = 6'b000100;
+    parameter J     = 6'b000010;
+
+    reg [1:0] aluop;
+
+    alucontrol ac(aluop, funct, alucont);
+
+    always @(*) begin
+        branch   <= 0;
+        jump     <= 0;
+        regdst   <= 0;
+        alusrc   <= 0;
+        memwrite <= 0;
+        memread  <= 0;
+        memtoreg <= 0;
+        regwrite <= 0;
+        aluop    <= 2'b00;
+
+        case (op)
+            RTYPE: begin
+                regdst   <= 1;
+                regwrite <= 1;
+                aluop    <= 2'b10;
+            end
+            ADDI: begin
+                alusrc   <= 1;
+                regwrite <= 1;
+            end
+            LB: begin
+                alusrc   <= 1;
+                memread  <= 1;
+                memtoreg <= 1;
+                regwrite <= 1;
+            end
+            SB: begin
+                alusrc   <= 1;
+                memwrite <= 1;
+            end
+            BEQ: begin
+                branch   <= 1;
+                aluop    <= 2'b01;
+            end
+            J: begin
+                jump     <= 1;
+            end
+        endcase
     end
-    */
 
+endmodule
+
+
+
+module alu #(
+    parameter DATA_WIDTH = 32
+) (
+    input      [DATA_WIDTH-1:0] a, b,
+    input      [2:0]            alucont,
+    output                      zero,
+    output reg [DATA_WIDTH-1:0] result
+);
+
+    wire [DATA_WIDTH-1:0] b2, sum, slt;
+
+    assign b2 = alucont[2] ? ~b : b;
+    assign sum = a + b2 + alucont[2];
+    // slt should be 1 if most significant bit of sum is 1
+    assign slt = sum[DATA_WIDTH-1];
+
+    // if sum is zero, set 1
+    assign zero = !(|sum);
+
+    always@(*)
+        case(alucont[1:0])
+            2'b00: result <= a & b2;
+            2'b01: result <= a | b2;
+            2'b10: result <= sum;
+            2'b11: result <= slt;
+        endcase
+endmodule
+
+
+
+module regfile #(
+    parameter DATA_WIDTH = 32
+) (
+    input                   clk,
+    input                   regwrite,
+    input  [4:0]            ra1, ra2, wa,
+    input  [DATA_WIDTH-1:0] wd,
+    output [DATA_WIDTH-1:0] rd1, rd2
+);
+
+    reg [DATA_WIDTH-1:0] RAM [0:31];
+
+    // three ported register file
+    // read two ports combinationally
+    // write third port on rising edge of clock
+    // register 0 hardwired to 0
+    always @(posedge clk) begin
+        if (regwrite) RAM[wa] <= wd;
+    end
+
+    assign rd1 = ra1 ? RAM[ra1] : 0;
+    assign rd2 = ra2 ? RAM[ra2] : 0;
 endmodule
 
 

@@ -35,8 +35,8 @@ set_output_delay 0.1 -clock clk [all_outputs]
 #
 # Clock gating
 #
-set_clock_gating_style -sequential latch
-insert_clock_gating
+# set_clock_gating_style -sequential latch
+# insert_clock_gating
 
 #
 # Design synthesis

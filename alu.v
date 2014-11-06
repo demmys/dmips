@@ -15,7 +15,7 @@ module alu #(
     assign slt = sum[DATA_WIDTH-1];
 
     // if sum is zero, set 1
-    assign zero = !(|sum);
+    assign zero = |sum === 0;
 
     always@(*)
         case(alucont[1:0])

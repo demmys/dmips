@@ -34,9 +34,9 @@ module hazarddetect (
 );
 
     // LB
-    assign hazard    = ex_memread && ((id_rs == ex_wa) || (id_rt == ex_wa));
+    assign hazard    = (ex_memread && ((id_rs == ex_wa) || (id_rt == ex_wa))) === 1;
     // BEQ
-    assign lookahead = id_branch && (ex_branch || (((id_rs == ex_wa) || (id_rt == ex_wa)) || ((id_rs == mem_wa) || (id_rt == mem_wa))));
+    assign lookahead = (id_branch && (ex_branch || (((id_rs == ex_wa) || (id_rt == ex_wa)) || ((id_rs == mem_wa) || (id_rt == mem_wa))))) === 1;
 
 endmodule
 
@@ -50,11 +50,11 @@ module forwardunit (
 );
 
     // id <= wb
-    assign id_rd1fw = wb_regwrite && (id_rs === wb_wa);
-    assign id_rd2fw = wb_regwrite && (id_rt === wb_wa);
+    assign id_rd1fw = (wb_regwrite && (id_rs === wb_wa)) === 1;
+    assign id_rd2fw = (wb_regwrite && (id_rt === wb_wa)) === 1;
     // { ex <= wb, ex <= mem }
-    assign ex_rd1fw = { wb_regwrite && (ex_rs === wb_wa), mem_regwrite && (ex_rs === mem_wa) };
-    assign ex_rd2fw = { wb_regwrite && (ex_rt === wb_wa), mem_regwrite && (ex_rt === mem_wa) };
+    assign ex_rd1fw = { (wb_regwrite && (ex_rs === wb_wa)) === 1, (mem_regwrite && (ex_rs === mem_wa)) === 1 };
+    assign ex_rd2fw = { (wb_regwrite && (ex_rt === wb_wa)) === 1, (mem_regwrite && (ex_rt === mem_wa)) === 1 };
 
 endmodule
 
@@ -73,10 +73,29 @@ module datapath #(
     parameter NOP = 32'h20000000;
 
     /*
+     * Registers
+     */
+    // Instruction Fetch
+    reg  [31:0] pc, if_id_pc, if_id_instr;
+    // Instruction Decode
+    reg                   id_ex_regdst, id_ex_alusrc, id_ex_branch, id_ex_memwrite, id_ex_memread, id_ex_memtoreg, id_ex_regwrite;
+    reg  [2:0]            id_ex_alucont;
+    reg  [4:0]            id_ex_rs, id_ex_rt, id_ex_rd;
+    reg  [31:0]           id_ex_branchpc, id_ex_imm;
+    reg  [DATA_WIDTH-1:0] id_ex_rd1, id_ex_rd2;
+    // Execute
+    reg         ex_mem_memwrite, ex_mem_memread, ex_mem_memtoreg, ex_mem_regwrite;
+    reg [4:0]   ex_mem_wa;
+    reg [31:0]  ex_mem_alures, ex_mem_writedata;
+    // Memory
+    reg        mem_wb_regwrite, mem_wb_memtoreg;
+    reg [4:0]  mem_wb_wa;
+    reg [31:0] mem_wb_readdata, mem_wb_alures;
+
+
+    /*
      * Instruction Fetch
      */
-    reg  [31:0] pc, if_id_pc, if_id_instr;
-
     wire        hazard, lookahead, if_flush, id_flush;
     wire [1:0]  pcsrc;
     wire [31:0] nextpc, incpc, branchpc, ex_branchpc, jumppc, instr;
@@ -90,7 +109,7 @@ module datapath #(
     // flop
     always @(posedge clk or posedge reset) begin
         if (reset) pc <= 32'h00000000;
-        else if (!(hazard === 1)) begin
+        else if (!hazard) begin
             pc          <= nextpc;
             if_id_pc    <= incpc;
             if_id_instr <= instr;
@@ -101,12 +120,6 @@ module datapath #(
     /*
      * Instruction Decode (Write Back)
      */
-    reg                   id_ex_regdst, id_ex_alusrc, id_ex_branch, id_ex_memwrite, id_ex_memread, id_ex_memtoreg, id_ex_regwrite;
-    reg  [2:0]            id_ex_alucont;
-    reg  [4:0]            id_ex_rs, id_ex_rt, id_ex_rd;
-    reg  [31:0]           id_ex_branchpc, id_ex_imm;
-    reg  [DATA_WIDTH-1:0] id_ex_rd1, id_ex_rd2;
-
     wire                  regdst, alusrc, branch, jump, memwrite, memread, memtoreg, regwrite, eq, id_rd1fw, id_rd2fw, zero;
     wire [2:0]            alucont;
     wire [5:0]            op, funct;
@@ -124,7 +137,7 @@ module datapath #(
     assign jumppc = { if_id_pc[31:28], if_id_instr[25:0] } << 2;
     assign pcsrc  = jump === 1 ? 2'b01
                     : (branch & eq & !(lookahead || hazard)) === 1 ? 2'b10
-                    : (id_ex_branch & zero) === 1 ? 2'b11
+                    : id_ex_branch & zero ? 2'b11
                     : 2'b00;
     controller               ctl(op, funct, branch, jump, regdst, alusrc, memwrite, memread, memtoreg, regwrite, alucont);
     regfile    #(DATA_WIDTH) rf(clk, mem_wb_regwrite, rs, rt, mem_wb_wa, wd, rd1, rd2);
@@ -162,10 +175,6 @@ module datapath #(
     /*
      * Execute
      */
-    reg         ex_mem_memwrite, ex_mem_memread, ex_mem_memtoreg, ex_mem_regwrite;
-    reg [4:0]   ex_mem_wa;
-    reg [31:0]  ex_mem_alures, ex_mem_writedata;
-
     wire [1:0]  ex_rd1fw, ex_rd2fw;
     wire [4:0]  wa;
     wire [31:0] fw_id_ex_rd1, fw_id_ex_rd2, alusrc2, alures;
@@ -198,10 +207,6 @@ module datapath #(
     /*
      * Memory
      */
-    reg        mem_wb_regwrite, mem_wb_memtoreg;
-    reg [4:0]  mem_wb_wa;
-    reg [31:0] mem_wb_readdata, mem_wb_alures;
-
     // wiring
     assign dadr      = ex_mem_alures;
     assign dmemwd    = ex_mem_writedata;
@@ -259,7 +264,7 @@ module eqdetect #(
     output             y
 );
 
-    assign y = a == b;
+    assign y = a === b;
 endmodule
 
 
